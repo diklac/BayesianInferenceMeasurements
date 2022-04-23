@@ -131,6 +131,42 @@ def calc_CI_without_sigma(x, ys, n, confidence_level):
     beta_CI_half = t_n_2*np.sqrt(S2/Sxx)
     return (alpha_CI_half, beta_CI_half)
 
+def calc_fit_CI_with_sigma(x, ys, n, sigma_exp, confidence_level):
+    '''
+    Calculate the fit CI when knowning sigma_exp.
+
+    Parameters
+    ----------
+    x : independent variable
+    ys : measurements
+    n : number of measurements
+    sigma_exp : measurements std
+    confidence_level : in [0,1]
+    '''
+    (xbar, ybar, Sxx, Sxy) = calc_aux(x, ys)
+    z_star = stats.norm.ppf(1 - 0.5*(1 - confidence_level))
+    half_interval = z_star*sigma_exp*np.sqrt(1.0/n + (x - xbar)**2/Sxx)
+    return half_interval
+
+def calc_fit_CI_without_sigma(x, ys, n, confidence_level):
+    '''
+    Calculate the fit CI when knowning sigma_exp.
+
+    Parameters
+    ----------
+    x : independent variable
+    ys : measurements
+    n : number of measurements
+    sigma_exp : measurements std
+    confidence_level : in [0,1]
+    '''
+    (alpha_est, beta_est) = calc_point_estimation(x, ys)
+    (xbar, ybar, Sxx, Sxy) = calc_aux(x, ys)
+    S2 = (1/(n - 2))*np.dot(ys - alpha_est - beta_est*x, ys - alpha_est - beta_est*x)
+    t_n_2 = stats.t.ppf(1 - 0.5*(1 - confidence_level), n - 2)
+    half_interval = t_n_2*np.sqrt(S2*(1.0/n + (x - xbar)**2/Sxx))
+    return half_interval
+
 
 # set plotting style
 plt.style.use('seaborn-darkgrid')
@@ -141,21 +177,44 @@ plt.tight_layout()
 # set rng
 rng = np.random.default_rng()
 
+# plot large and small error bars
+ax1 = plt.subplot(1, 2, 1)
+plt.errorbar(['super accurate phys const'], [137], [20], linewidth = line_width, capsize = errorbar_capsize, linestyle = '', marker = 'o', capthick = errorbar_capthick)
+plt.title('Me')
+plt.subplot(1, 2, 2, sharey = ax1)
+plt.errorbar(['super accurate phys const'], [137], [7], linewidth = line_width, capsize = errorbar_capsize, linestyle = '', marker = 'o', capthick = errorbar_capthick)
+plt.title('Other Lab')
+
+# plot partially negative interval for nonnegative value
+plt.figure()
+plt.errorbar(['cookie mass'], [20], [35], linewidth = line_width, capsize = errorbar_capsize, linestyle = '', marker = 'o', capthick = errorbar_capthick)
+plt.ylabel('mass [g]')
+plt.title('Nonsensical Error Bar')
+
 # generate the measurements from a normal model
 x = np.linspace(xi, xf, n)
 ys_clean = alpha0 + beta0*x
 ys = rng.normal(ys_clean, sigma_exp)
 
 # plot the noisy measurements
+plt.figure()
 plt.errorbar(x, ys, sigma_exp, linewidth = line_width, capsize = errorbar_capsize, linestyle = '', marker = 'o', capthick = errorbar_capthick)
 plt.xlabel(r'$\Delta x$ [mm]')
-plt.ylabel(r'$I_{out}$ $[W/cm^2]$')
+plt.ylabel(r'$I_{absorbed}$ $[W/cm^2]$')
 
 # without using any statistical assumptions, calculate the fit
 # parameters based on least squares
 (alpha_est, beta_est) = calc_point_estimation(x, ys)
 print('-----------Estimates-----------------')
 print('alpha = {0:.2f}, beta = {1:.2f}'.format(alpha_est, beta_est))
+y_fit = alpha_est + beta_est*x
+
+# plot the fit
+plt.figure()
+plt.errorbar(x, ys, sigma_exp, linewidth = line_width, capsize = errorbar_capsize, linestyle = '', marker = 'o', capthick = errorbar_capthick)
+plt.plot(x, y_fit, linewidth = line_width)
+plt.xlabel(r'$\Delta x$ [mm]')
+plt.ylabel(r'$I_{absorbed}$ $[W/cm^2]$')
 
 # using some statistical assumptions, namely that
 # the measurements have mean \alpha + \beta*x_i and variance
@@ -183,6 +242,19 @@ plt.title(r'$\hat{\alpha}$')
 plt.subplot(1, 2, 2)
 plt.errorbar(ax, [beta_est for item in ax], [var_beta_est, beta_CI_half_sigma, beta_CI_half], linewidth = line_width, capsize = errorbar_capsize, linestyle = '', marker = 'o', capthick = errorbar_capthick)
 plt.title(r'$\hat{\beta}$')
+
+# calculate fit CIs
+CI_fit_sigma = calc_fit_CI_with_sigma(x, ys, n, sigma_exp, confidence_level)
+CI_fit_without_sigma = calc_fit_CI_without_sigma(x, ys, n, confidence_level)
+
+# plot the fit with CIs
+fig, ax = plt.subplots()
+ax.errorbar(x, ys, sigma_exp, linewidth = line_width, capsize = errorbar_capsize, linestyle = '', marker = 'o', capthick = errorbar_capthick)
+ax.plot(x, y_fit, linewidth = line_width)
+ax.fill_between(x, y_fit + CI_fit_sigma, y_fit - CI_fit_sigma, alpha = 0.3)
+ax.fill_between(x, y_fit + CI_fit_without_sigma, y_fit - CI_fit_without_sigma, alpha = 0.3)
+plt.xlabel(r'$\Delta x$ [mm]')
+plt.ylabel(r'$I_{absorbed}$ $[W/cm^2]$')
 
 # plot the scalar factor in the CIs for knowing sigma_exp (normal)
 # and not knowing sigma_exp (Student's t)
